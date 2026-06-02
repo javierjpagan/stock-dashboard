@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stock Trading Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d27;
+    --bg3: #22263a;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --text: #e8eaf0;
+    --text2: #8b91a8;
+    --text3: #555c75;
+    --up: #1d9e75;
+    --dn: #d85a30;
+    --blue: #378add;
+    --info-bg: rgba(55,138,221,0.12);
+    --info-txt: #7ab8f0;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+
+  /* Layout */
+  .app { display: grid; grid-template-rows: 56px 1fr; height: 100vh; overflow: hidden; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 0 20px; background: var(--bg2); border-bottom: 0.5px solid var(--border); }
+  .topbar h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+  .topbar h1 span { color: var(--blue); }
+  .content { display: grid; grid-template-columns: 220px 1fr; overflow: hidden; }
+  .sidebar { background: var(--bg2); border-right: 0.5px solid var(--border); overflow-y: auto; padding: 16px 12px; display: flex; flex-direction: column; gap: 20px; }
+  .main { overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* Setup bar */
+  .setup-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg2); border-radius: var(--radius); border: 0.5px solid var(--border2); flex-wrap: wrap; }
+  .setup-bar label { font-size: 11px; color: var(--text2); white-space: nowrap; }
+  .setup-bar input { flex: 1; min-width: 180px; font-size: 12px; padding: 5px 10px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg3); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; outline: none; }
+  .setup-bar input:focus { border-color: var(--blue); }
+  .btn { padding: 6px 14px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: transparent; color: var(--text); font-size: 12px; cursor: pointer; white-space: nowrap; transition: background 0.15s; }
+  .btn:hover { background: var(--bg3); }
+  .btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 500; }
+  .btn-primary:hover { background: #2a7acc; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+  .status-dot.live { background: var(--up); }
+  .status-dot.err { background: var(--dn); }
+  .status-dot.loading { background: #BA7517; animation: pulse 1s infinite; }
+  .status-txt { font-size: 11px; color: var(--text2); }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+  /* Sidebar sections */
+  .sidebar-section-title { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+  .ticker-card { padding: 9px 10px; border-radius: var(--radius); cursor: pointer; border: 0.5px solid transparent; margin-bottom: 4px; transition: background 0.1s; }
+  .ticker-card:hover { background: var(--bg3); }
+  .ticker-card.active { background: var(--bg3); border-color: var(--border2); }
+  .ticker-sym { font-size: 13px; font-weight: 600; color: var(--text); }
+  .ticker-name { font-size: 10px; color: var(--text2); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ticker-price { font-size: 13px; font-weight: 500; }
+  .ticker-chg { font-size: 11px; margin-left: 4px; }
+  .up { color: var(--up); } .dn { color: var(--dn); }
+  .add-ticker { display: flex; gap: 6px; margin-top: 4px; }
+  .add-ticker input { flex: 1; font-size: 12px; padding: 5px 8px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg3); color: var(--text); text-transform: uppercase; outline: none; }
+  .add-ticker input:focus { border-color: var(--blue); }
+  .mkt-row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 5px; }
+
+  /* Header */
+  .price-header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .big-price { font-size: 32px; font-weight: 700; letter-spacing: -0.03em; }
+  .big-chg { font-size: 15px; font-weight: 500; }
+  .sym-label { font-size: 12px; color: var(--text2); margin-left: auto; }
+  .range-strip { display: flex; gap: 14px; font-size: 11px; color: var(--text2); align-items: center; }
+  .range-bar { height: 3px; background: var(--border2); border-radius: 2px; flex: 1; max-width: 120px; position: relative; }
+  .range-fill { height: 3px; border-radius: 2px; position: absolute; background: var(--blue); }
+  .range-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); position: absolute; top: -2px; transform: translateX(-50%); }
+
+  /* Tabs */
+  .tab-bar { display: flex; gap: 4px; }
+  .tab { padding: 5px 12px; border-radius: var(--radius); font-size: 12px; cursor: pointer; border: 0.5px solid var(--border); background: transparent; color: var(--text2); transition: background 0.1s; }
+  .tab:hover { background: var(--bg3); color: var(--text); }
+  .tab.active { background: var(--bg3); color: var(--text); border-color: var(--border2); font-weight: 500; }
+
+  /* Chart */
+  .chart-wrap { position: relative; height: 200px; background: var(--bg2); border-radius: var(--radius-lg); border: 0.5px solid var(--border); padding: 12px; }
+
+  /* Metrics */
+  .metrics-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+  .metric { background: var(--bg2); border-radius: var(--radius); padding: 10px 12px; border: 0.5px solid var(--border); }
+  .metric-label { font-size: 10px; color: var(--text2); margin-bottom: 4px; }
+  .metric-val { font-size: 15px; font-weight: 600; }
+
+  /* Bottom panel */
+  .panel-wrap { background: var(--bg2); border-radius: var(--radius-lg); border: 0.5px solid var(--border); padding: 14px; }
+  .opt-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .opt-tab { font-size: 12px; padding: 4px 14px; border-radius: var(--radius); cursor: pointer; border: 0.5px solid var(--border); background: transparent; color: var(--text2); }
+  .opt-tab.active { background: var(--bg3); color: var(--text); font-weight: 500; border-color: var(--border2); }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { color: var(--text2); font-weight: 500; text-align: right; padding: 4px 8px; border-bottom: 0.5px solid var(--border); }
+  th:first-child { text-align: left; }
+  td { text-align: right; padding: 5px 8px; color: var(--text); border-bottom: 0.5px solid var(--border); }
+  td:first-child { text-align: left; font-weight: 500; }
+  tr.atm { background: var(--bg3); }
+  .badge-atm { font-size: 9px; background: var(--info-bg); color: var(--info-txt); padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+  .ind-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+  .ind-card { background: var(--bg3); border-radius: var(--radius); padding: 10px 12px; border: 0.5px solid var(--border); }
+  .ind-name { font-size: 10px; color: var(--text2); margin-bottom: 2px; }
+  .ind-val { font-size: 15px; font-weight: 600; }
+  .ind-sig { font-size: 10px; margin-top: 2px; }
+  .sig-buy { color: var(--up); } .sig-sell { color: var(--dn); } .sig-neu { color: var(--text2); }
+  .news-item { padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+  .news-item:last-child { border-bottom: none; }
+  .news-src { font-size: 10px; color: var(--text2); }
+  .news-title { font-size: 13px; margin: 3px 0; line-height: 1.4; }
+  .news-title a { color: var(--text); text-decoration: none; }
+  .news-title a:hover { color: var(--blue); }
+  .news-sent { font-size: 10px; font-weight: 500; }
+
+  /* Utility */
+  .err-banner { font-size: 12px; color: #f09575; padding: 8px 12px; background: rgba(216,90,48,0.1); border-radius: var(--radius); border: 0.5px solid rgba(216,90,48,0.25); display: none; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-left: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { text-align: center; color: var(--text2); font-size: 12px; padding: 20px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <h1>Stock<span>Dash</span></h1>
+    <div style="flex:1"></div>
+    <!-- Setup bar inline -->
+    <div class="setup-bar" style="margin:0;border:none;background:transparent;padding:0">
+      <label>Proxy URL</label>
+      <input id="proxyUrl" placeholder="https://your-proxy.onrender.com" style="min-width:260px" />
+      <label>or API key</label>
+      <input id="apiKey" type="password" placeholder="Polygon key (dev only)" style="min-width:160px;max-width:200px" />
+      <button class="btn btn-primary" onclick="testConnection()">Connect</button>
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-txt" id="statusTxt">Not connected</span>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div>
+        <div class="sidebar-section-title">Watchlist</div>
+        <div id="wl"></div>
+        <div class="add-ticker">
+          <input id="addInput" placeholder="Add ticker..." maxlength="6" onkeydown="if(event.key==='Enter')addTicker()" />
+          <button class="btn" onclick="addTicker()" style="padding:5px 10px;font-size:11px">+</button>
+        </div>
+      </div>
+      <div>
+        <div class="sidebar-section-title">Market</div>
+        <div id="mktPanel" style="margin-top:4px"></div>
+      </div>
+    </div>
+
+    <!-- Main -->
+    <div class="main">
+      <div class="err-banner" id="errBanner"></div>
+
+      <!-- Price header -->
+      <div>
+        <div class="price-header">
+          <div class="big-price" id="mainPrice">—</div>
+          <div class="big-chg" id="mainChg"></div>
+          <div class="sym-label" id="mainName"></div>
+          <span id="mainSpinner"></span>
+        </div>
+        <div class="range-strip" style="margin-top:8px">
+          <span>52W: <span style="color:var(--text)" id="lo52">—</span> – <span style="color:var(--text)" id="hi52">—</span></span>
+          <div class="range-bar"><div class="range-fill" id="rangeFill" style="width:0%"></div><div class="range-dot" id="rangeDot" style="left:0%"></div></div>
+          <span>Vol: <span style="color:var(--text)" id="mainVol">—</span></span>
+          <span style="font-size:10px;color:var(--text3)">15-min delayed</span>
+        </div>
+      </div>
+
+      <!-- Time tabs -->
+      <div class="tab-bar">
+        <button class="tab active" onclick="setRange('1D',this)">1D</button>
+        <button class="tab" onclick="setRange('1W',this)">1W</button>
+        <button class="tab" onclick="setRange('1M',this)">1M</button>
+        <button class="tab" onclick="setRange('3M',this)">3M</button>
+        <button class="tab" onclick="setRange('1Y',this)">1Y</button>
+        <button class="tab" onclick="setRange('5Y',this)">5Y</button>
+      </div>
+
+      <!-- Chart -->
+      <div class="chart-wrap">
+        <canvas id="priceChart" role="img" aria-label="Stock price chart for selected ticker"></canvas>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics-row">
+        <div class="metric"><div class="metric-label">Market Cap</div><div class="metric-val" id="m-cap">—</div></div>
+        <div class="metric"><div class="metric-label">P/E Ratio</div><div class="metric-val" id="m-pe">—</div></div>
+        <div class="metric"><div class="metric-label">EPS</div><div class="metric-val" id="m-eps">—</div></div>
+        <div class="metric"><div class="metric-label">Dividend</div><div class="metric-val" id="m-div">—</div></div>
+      </div>
+
+      <!-- Bottom panel -->
+      <div class="panel-wrap">
+        <div class="tab-bar" style="margin-bottom:12px">
+          <button class="tab active" onclick="showPanel('options',this)">Options chain</button>
+          <button class="tab" onclick="showPanel('indicators',this)">Technicals</button>
+          <button class="tab" onclick="showPanel('news',this)">News</button>
+        </div>
+
+        <div id="panel-options">
+          <div class="opt-tabs">
+            <button class="opt-tab active" onclick="setOptType('calls',this)">Calls</button>
+            <button class="opt-tab" onclick="setOptType('puts',this)">Puts</button>
+            <span style="font-size:10px;color:var(--text2);margin-left:8px;align-self:center">Exp: <span id="optExp">—</span> &nbsp;|&nbsp; Spot: <span id="optSpot">—</span></span>
+          </div>
+          <table>
+            <thead><tr><th style="text-align:left">Strike</th><th>Bid</th><th>Ask</th><th>Last</th><th>IV</th><th>Delta</th><th>OI</th><th>Vol</th></tr></thead>
+            <tbody id="optBody"><tr><td colspan="8" class="empty">Connect to load live options data</td></tr></tbody>
+          </table>
+        </div>
+
+        <div id="panel-indicators" style="display:none">
+          <div class="ind-grid" id="indCards"><div class="empty" style="grid-column:1/-1">Connect to load technicals</div></div>
+        </div>
+
+        <div id="panel-news" style="display:none">
+          <div id="newsFeed"><div class="empty">Connect to load news</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ─────────────────────────────────────────────────────────────
+// If you want to pre-fill the proxy URL at deploy time, set it here:
+const DEFAULT_PROXY = 'https://polygon-proxy-server-production.up.railway.app';
+
+// ── State ──────────────────────────────────────────────────────────────
+let TICKERS = ['AAPL','MSFT','NVDA','TSLA','AMZN','SPY'];
+let currentSym = 'AAPL', currentRange = '1D', currentOptType = 'calls';
+let priceChart = null, connected = false, quoteCache = {};
+
+// Pre-fill proxy if configured
+if (DEFAULT_PROXY) document.getElementById('proxyUrl').value = DEFAULT_PROXY;
+
+// ── API helpers ────────────────────────────────────────────────────────
+function getBase() {
+  return {
+    proxy: document.getElementById('proxyUrl').value.trim().replace(/\/$/,''),
+    key:   document.getElementById('apiKey').value.trim()
+  };
+}
+
+async function polygonFetch(path, params = {}) {
+  const { proxy, key } = getBase();
+  let url;
+  if (proxy) {
+    const qs = new URLSearchParams(params).toString();
+    url = `${proxy}/api/polygon/${path}${qs ? '?' + qs : ''}`;
+  } else if (key) {
+    const qs = new URLSearchParams({ ...params, apiKey: key }).toString();
+    url = `https://api.polygon.io/${path}?${qs}`;
+  } else {
+    throw new Error('No proxy URL or API key configured');
+  }
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ── Connection ─────────────────────────────────────────────────────────
+async function testConnection() {
+  setStatus('loading', 'Testing...');
+  try {
+    const data = await polygonFetch('v2/aggs/ticker/AAPL/prev');
+    if (data.results?.length) {
+      setStatus('live', 'Connected — 15-min delayed data');
+      connected = true;
+      loadAll();
+    } else {
+      setStatus('err', 'Connected but no data returned');
+    }
+  } catch(e) {
+    setStatus('err', 'Failed: ' + e.message);
+  }
+}
+
+function setStatus(state, msg) {
+  document.getElementById('statusDot').className = 'status-dot ' + state;
+  document.getElementById('statusTxt').textContent = msg;
+}
+
+function showError(msg) {
+  const b = document.getElementById('errBanner');
+  b.style.display = msg ? 'block' : 'none';
+  if (msg) b.textContent = msg;
+}
+
+// ── Data fetchers ──────────────────────────────────────────────────────
+async function fetchQuote(sym) {
+  if (quoteCache[sym] && Date.now() - quoteCache[sym].ts < 60000) return quoteCache[sym];
+  const data = await polygonFetch(`v2/aggs/ticker/${sym}/prev`);
+  const r = data.results?.[0];
+  if (!r) throw new Error('No data for ' + sym);
+  const q = { c:r.c, o:r.o, h:r.h, l:r.l, v:r.v,
+    chg: r.c-r.o, chgPct: (r.c-r.o)/r.o*100, ts: Date.now() };
+  quoteCache[sym] = q;
+  return q;
+}
+
+async function fetchDetails(sym) {
+  return polygonFetch(`v3/reference/tickers/${sym}`);
+}
+
+function rangeParams(range) {
+  const now = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  const end = fmt(now);
+  const cfg = {
+    '1D':{ mult:5,  span:'minute', days:1   },
+    '1W':{ mult:30, span:'minute', days:7   },
+    '1M':{ mult:1,  span:'day',    days:30  },
+    '3M':{ mult:1,  span:'day',    days:90  },
+    '1Y':{ mult:1,  span:'week',   days:365 },
+    '5Y':{ mult:1,  span:'month',  days:1825}
+  };
+  const c = cfg[range] || cfg['1M'];
+  const start = new Date(now); start.setDate(start.getDate() - c.days);
+  return { mult:c.mult, span:c.span, from:fmt(start), to:end };
+}
+
+async function fetchHistory(sym, range) {
+  const { mult, span, from, to } = rangeParams(range);
+  return polygonFetch(`v2/aggs/ticker/${sym}/range/${mult}/${span}/${from}/${to}`,
+    { adjusted:'true', sort:'asc', limit:500 });
+}
+
+async function fetchOptions(sym) {
+  return polygonFetch(`v3/snapshot/options/${sym}`, { limit:20 });
+}
+
+async function fetchNews(sym) {
+  return polygonFetch(`v2/reference/news`, { ticker:sym, limit:5 });
+}
+
+// ── Render helpers ─────────────────────────────────────────────────────
+function fmtVol(v) {
+  if (!v) return '—';
+  if (v>=1e9) return (v/1e9).toFixed(1)+'B';
+  if (v>=1e6) return (v/1e6).toFixed(1)+'M';
+  if (v>=1e3) return (v/1e3).toFixed(0)+'K';
+  return v.toString();
+}
+function fmtCap(v) {
+  if (v>=1e12) return '$'+(v/1e12).toFixed(2)+'T';
+  if (v>=1e9)  return '$'+(v/1e9).toFixed(1)+'B';
+  return '$'+v.toLocaleString();
+}
+
+function buildWatchlist() {
+  document.getElementById('wl').innerHTML = TICKERS.map(sym => {
+    const q = quoteCache[sym];
+    const up = q ? q.chg >= 0 : true;
+    return `<div class="ticker-card${sym===currentSym?' active':''}" onclick="selectSym('${sym}')">
+      <div class="ticker-name">${sym}</div>
+      <div style="display:flex;align-items:baseline;gap:4px">
+        <span class="ticker-sym">${sym}</span>
+        <span class="ticker-price">${q ? '$'+q.c.toFixed(2) : '—'}</span>
+        <span class="ticker-chg ${up?'up':'dn'}">${q ? (up?'+':'')+q.chgPct.toFixed(2)+'%' : ''}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addTicker() {
+  const val = document.getElementById('addInput').value.trim().toUpperCase();
+  if (!val || TICKERS.includes(val)) return;
+  TICKERS.push(val);
+  document.getElementById('addInput').value = '';
+  buildWatchlist();
+  if (connected) fetchQuote(val).then(()=>buildWatchlist()).catch(()=>{});
+}
+
+function updateHeader(q, details) {
+  if (!q) return;
+  document.getElementById('mainPrice').textContent = '$'+q.c.toFixed(2);
+  const up = q.chg >= 0;
+  const el = document.getElementById('mainChg');
+  el.textContent = `${up?'+':''}$${Math.abs(q.chg).toFixed(2)} (${up?'+':''}${q.chgPct.toFixed(2)}%)`;
+  el.className = 'big-chg '+(up?'up':'dn');
+  document.getElementById('mainVol').textContent = fmtVol(q.v);
+  document.getElementById('lo52').textContent = q.l ? '$'+q.l.toFixed(2) : '—';
+  document.getElementById('hi52').textContent = q.h ? '$'+q.h.toFixed(2) : '—';
+  if (details?.results) {
+    const r = details.results;
+    document.getElementById('mainName').textContent = r.name || currentSym;
+    document.getElementById('m-cap').textContent = r.market_cap ? fmtCap(r.market_cap) : '—';
+    document.getElementById('m-pe').textContent = '—';
+    document.getElementById('m-eps').textContent = '—';
+    document.getElementById('m-div').textContent = '—';
+  }
+  const pct = q.h && q.l ? Math.min(100,Math.max(0,(q.c-q.l)/(q.h-q.l)*100)) : 50;
+  document.getElementById('rangeFill').style.width = pct+'%';
+  document.getElementById('rangeDot').style.left = pct+'%';
+}
+
+function renderChart(results) {
+  const vals = results.map(r => +r.c.toFixed(2));
+  const labels = results.map(r => {
+    const d = new Date(r.t);
+    return (currentRange==='1D'||currentRange==='1W')
+      ? d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+      : d.toLocaleDateString([],{month:'short',day:'numeric'});
+  });
+  const up = vals.length > 1 && vals[vals.length-1] >= vals[0];
+  const col = up ? '#1d9e75' : '#d85a30';
+  if (priceChart) priceChart.destroy();
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  priceChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{ data:vals, borderColor:col,
+      backgroundColor: up ? 'rgba(29,158,117,0.1)' : 'rgba(216,90,48,0.1)',
+      fill:true, pointRadius:0, borderWidth:1.5, tension:0.2 }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{
+        callbacks:{ label: c => '$'+c.parsed.y.toFixed(2) },
+        backgroundColor:'#1a1d27', titleColor:'#8b91a8', bodyColor:'#e8eaf0',
+        borderColor:'rgba(255,255,255,0.1)', borderWidth:0.5
+      }},
+      scales:{
+        x:{ grid:{display:false}, ticks:{maxTicksLimit:6,color:'#555c75',font:{size:10}} },
+        y:{ grid:{color:'rgba(255,255,255,0.05)'}, ticks:{callback:v=>'$'+v.toFixed(0),color:'#555c75',font:{size:10}} }
+      }
+    }
+  });
+}
+
+function computeIndicators(results) {
+  const closes = results.map(r => r.c);
+  const n = closes.length;
+  let rsi = '—', rsiSig = 'neu';
+  if (n >= 15) {
+    let gains=0, losses=0;
+    for (let i=n-14; i<n; i++) {
+      const d = closes[i]-closes[i-1];
+      if (d>0) gains+=d; else losses-=d;
+    }
+    const rv = 100 - 100/(1+(gains/(losses||0.001)));
+    rsi = rv.toFixed(1);
+    rsiSig = rv>70?'sell':rv<30?'buy':'neu';
+  }
+  const sma = (arr,p) => arr.length>=p ? arr.slice(-p).reduce((a,b)=>a+b,0)/p : null;
+  const sma20 = sma(closes,20), sma50 = sma(closes,Math.min(50,n));
+  const last = closes[n-1];
+  const inds = [
+    {n:'RSI (14)', v:rsi, sig:rsiSig},
+    {n:'SMA 20', v:sma20?'$'+sma20.toFixed(2):'—', sig:sma20?(last>sma20?'buy':'sell'):'neu'},
+    {n:'SMA 50', v:sma50?'$'+sma50.toFixed(2):'—', sig:sma50?(last>sma50?'buy':'sell'):'neu'},
+    {n:'Price vs Open', v:results[0]?((last-results[0].o)/results[0].o*100).toFixed(2)+'%':'—', sig:last>(results[0]?.o||last)?'buy':'sell'},
+    {n:'Volume trend', v:n>=10?(results.slice(-5).reduce((a,r)=>a+r.v,0)/5>results.slice(-10,-5).reduce((a,r)=>a+r.v,0)/5?'↑ Above avg':'↓ Below avg'):'—', sig:'neu'},
+    {n:'H/L range', v:results.length?'$'+(Math.max(...results.map(r=>r.h))-Math.min(...results.map(r=>r.l))).toFixed(2):'—', sig:'neu'},
+  ];
+  document.getElementById('indCards').innerHTML = inds.map(i=>`
+    <div class="ind-card">
+      <div class="ind-name">${i.n}</div>
+      <div class="ind-val">${i.v}</div>
+      <div class="ind-sig sig-${i.sig}">${i.sig==='buy'?'↑ Bullish':i.sig==='sell'?'↓ Bearish':'→ Neutral'}</div>
+    </div>`).join('');
+}
+
+function renderOptions(data, spotPrice) {
+  document.getElementById('optSpot').textContent = spotPrice ? '$'+spotPrice.toFixed(2) : '—';
+  const results = data?.results || [];
+  if (!results.length) {
+    document.getElementById('optBody').innerHTML = '<tr><td colspan="8" class="empty">No options data on free tier for this ticker</td></tr>';
+    return;
+  }
+  const filtered = results.filter(r => r.details?.contract_type === currentOptType.slice(0,-1));
+  const sorted = filtered.sort((a,b) => a.details.strike_price - b.details.strike_price);
+  if (!sorted.length) {
+    document.getElementById('optBody').innerHTML = '<tr><td colspan="8" class="empty">No '+currentOptType+' found</td></tr>';
+    return;
+  }
+  document.getElementById('optExp').textContent = sorted[0]?.details?.expiration_date || '—';
+  document.getElementById('optBody').innerHTML = sorted.map(r => {
+    const d=r.details, gr=r.greeks||{}, q=r.day||{};
+    const atm = spotPrice && Math.abs(d.strike_price-spotPrice) < spotPrice*0.015;
+    return `<tr class="${atm?'atm':''}">
+      <td>${d.strike_price}${atm?'<span class="badge-atm">ATM</span>':''}</td>
+      <td>${r.last_quote?.bid?.toFixed(2)||'—'}</td><td>${r.last_quote?.ask?.toFixed(2)||'—'}</td>
+      <td>${q.close?.toFixed(2)||'—'}</td>
+      <td>${gr.implied_volatility?(gr.implied_volatility*100).toFixed(1)+'%':'—'}</td>
+      <td>${gr.delta?.toFixed(2)||'—'}</td>
+      <td>${q.open_interest?.toLocaleString()||'—'}</td>
+      <td>${q.volume?.toLocaleString()||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderNews(data) {
+  const items = data?.results || [];
+  if (!items.length) { document.getElementById('newsFeed').innerHTML = '<div class="empty">No news found</div>'; return; }
+  document.getElementById('newsFeed').innerHTML = items.map(n => {
+    const sent = n.insights?.[0]?.sentiment || 'neutral';
+    const cls = sent==='positive'?'pos':sent==='negative'?'neg':'neu';
+    const lbl = sent==='positive'?'● Positive':sent==='negative'?'● Negative':'● Neutral';
+    return `<div class="news-item">
+      <div class="news-src">${n.publisher?.name||'News'} · ${new Date(n.published_utc).toLocaleDateString()}</div>
+      <div class="news-title"><a href="${n.article_url}" target="_blank" rel="noopener">${n.title}</a></div>
+      <div class="news-sent ${cls==='pos'?'sig-buy':cls==='neg'?'sig-sell':'sig-neu'}">${lbl}</div>
+    </div>`;
+  }).join('');
+}
+
+async function loadMarket() {
+  const syms = ['SPY','QQQ','DIA'];
+  const names = {SPY:'S&P 500',QQQ:'Nasdaq',DIA:'Dow Jones'};
+  const panel = document.getElementById('mktPanel');
+  panel.innerHTML = '<div style="font-size:11px;color:var(--text2)">Loading...</div>';
+  const rows = await Promise.all(syms.map(async s => {
+    try {
+      const q = await fetchQuote(s);
+      const up = q.chg >= 0;
+      return `<div class="mkt-row"><span style="color:var(--text2)">${names[s]}</span>
+        <span>$${q.c.toFixed(2)} <span class="${up?'up':'dn'}">${up?'+':''}${q.chgPct.toFixed(2)}%</span></span></div>`;
+    } catch { return `<div class="mkt-row"><span style="color:var(--text2)">${names[s]}</span><span>—</span></div>`; }
+  }));
+  panel.innerHTML = rows.join('');
+}
+
+async function loadSymbol(sym) {
+  document.getElementById('mainSpinner').innerHTML = '<span class="spinner"></span>';
+  showError('');
+  try {
+    // Sequence requests to stay within free-tier rate limit (5 req/min)
+    const quote    = await fetchQuote(sym).then(v=>({status:'fulfilled',value:v})).catch(r=>({status:'rejected',reason:r}));
+    const details  = await fetchDetails(sym).then(v=>({status:'fulfilled',value:v})).catch(r=>({status:'rejected',reason:r}));
+    const history  = await fetchHistory(sym, currentRange).then(v=>({status:'fulfilled',value:v})).catch(r=>({status:'rejected',reason:r}));
+    const newsData = await fetchNews(sym).then(v=>({status:'fulfilled',value:v})).catch(r=>({status:'rejected',reason:r}));
+    const optData  = {status:'rejected',reason:new Error('Options require a paid Polygon plan')};
+    const q = quote.status==='fulfilled' ? quote.value : null;
+    updateHeader(q, details.status==='fulfilled' ? details.value : null);
+    if (history.status==='fulfilled') {
+      const res = history.value?.results || [];
+      if (res.length) { renderChart(res); computeIndicators(res); }
+      else showError('No price history — market may be closed or free tier limit reached');
+    } else showError('Chart error: ' + history.reason?.message);
+    if (optData.status==='fulfilled') renderOptions(optData.value, q?.c);
+    if (newsData.status==='fulfilled') renderNews(newsData.value);
+    quoteCache[sym] = q;
+    buildWatchlist();
+  } catch(e) {
+    showError('Error loading '+sym+': '+e.message);
+  } finally {
+    document.getElementById('mainSpinner').innerHTML = '';
+  }
+}
+
+async function loadAll() {
+  await loadSymbol(currentSym);
+  // Stagger remaining fetches to avoid free-tier rate limit
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+  const watchTickers = TICKERS.filter(s => s !== currentSym);
+  for (const s of watchTickers) {
+    await delay(1500);
+    fetchQuote(s).then(() => buildWatchlist()).catch(() => {});
+  }
+  await delay(1500);
+  loadMarket();
+}
+
+function selectSym(sym) {
+  currentSym = sym;
+  buildWatchlist();
+  if (connected) loadSymbol(sym);
+}
+
+function setRange(r, btn) {
+  currentRange = r;
+  document.querySelectorAll('.tab-bar .tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if (connected) fetchHistory(currentSym, r).then(d=>{
+    const res = d?.results||[];
+    if (res.length) { renderChart(res); computeIndicators(res); }
+  }).catch(e=>showError('Chart: '+e.message));
+}
+
+function showPanel(name, btn) {
+  ['options','indicators','news'].forEach(p => {
+    document.getElementById('panel-'+p).style.display = p===name?'block':'none';
+  });
+  btn.parentElement.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function setOptType(type, btn) {
+  currentOptType = type;
+  btn.parentElement.querySelectorAll('.opt-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if (connected) fetchOptions(currentSym).then(d=>renderOptions(d, quoteCache[currentSym]?.c)).catch(()=>{});
+}
+
+buildWatchlist();
+</script>
+</body>
+</html>
